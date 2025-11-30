@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rutas Unillanos - Metaheurísticas</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- Tus estilos -->
+  <link rel="stylesheet" href="/styles.css" />
+
+  <!-- Chart.js para las gráficas del paso a paso -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+
+  <div id="control-panel">
+    <div class="panel-header">
+      <div class="title-block">
+        <div class="title-main">
+          <span class="logo-dot"></span>
+          <span>Rutas Unillanos · Metaheurísticas</span>
+        </div>
+        <div class="title-sub">
+          <span class="badge">
+            <span class="live-dot"></span>
+            Optimización en tiempo (casi) real
+          </span>
+          <span class="badge badge-pill-success">
+            🚍 Alta demanda · Capacidad limitada
+          </span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-line"></div> Oficiales
+        </div>
+        <div class="legend-item">
+          <div class="legend-line legend-line-optimal"></div> Ruta optimizada
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-scroll">
+      <!-- Configuración del problema -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Configuración del problema</div>
+          <div class="section-caption">Definir método y restricciones</div>
+        </div>
+        <div class="row">
+          <select id="solver-select">
+            <option value="greedy">Greedy · Vecino más cercano</option>
+            <option value="ga">Genetic Algorithm · GA</option>
+            <option value="sa">Simulated Annealing · SA</option>
+          </select>
+          <button id="run-solver-btn">
+            <span class="spark">⚡</span>
+            Optimizar ruta
+          </button>
+        </div>
+        <div class="row row-tight">
+          <label for="capacity-input" class="section-caption" style="flex: 1;">
+            Capacidad del bus (estudiantes)
+          </label>
+          <input id="capacity-input" type="number" min="1" value="40" />
+        </div>
+      </div>
+
+      <!-- Rutas oficiales -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Rutas oficiales (boletín)</div>
+          <div class="section-caption">Selecciona qué rutas quieres combinar</div>
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button id="toggle-routes-btn">Desmarcar todo</button>
+        </div>
+        <div id="routes-list"></div>
+      </div>
+
+      <!-- Demanda por paradero -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Demanda por paradero</div>
+          <div class="section-caption">N° de estudiantes en cada punto</div>
+        </div>
+        <div id="demand-panel"></div>
+      </div>
+
+      <!-- Status & métricas -->
+      <div id="status-card">
+        <div id="status-text">
+          <span class="dot-ok"></span>
+          <span>Listo para optimizar.</span>
+        </div>
+        <div id="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Método</div>
+            <div class="metric-value" id="metric-method">—</div>
+            <div class="metric-badge" id="metric-route-label">Sin ruta</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Distancia</div>
+            <div class="metric-value" id="metric-distance">—</div>
+            <div class="metric-badge" id="metric-distance-badge">Pendiente</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Tiempo</div>
+            <div class="metric-value" id="metric-time">—</div>
+            <div class="metric-badge" id="metric-time-badge">Pendiente</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Demanda / Cap.</div>
+            <div class="metric-value" id="metric-demand">—</div>
+            <div class="metric-badge metric-badge-warn" id="metric-demand-badge">Sin validar</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Fitness</div>
+            <div class="metric-value" id="metric-fitness">—</div>
+            <div class="metric-badge" id="metric-fitness-badge">Pendiente</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">CPU</div>
+            <div class="metric-value" id="metric-cpu">—</div>
+            <div class="metric-badge" id="metric-cpu-badge">Sin ejecutar</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botón Paso a paso -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Paso a paso del algoritmo</div>
+          <div class="section-caption">Ver procedimiento detallado</div>
+        </div>
+        <div class="row">
+          <button id="btn-steps" class="btn-steps">
+            Ver paso a paso (sin datos)
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY PANTALLA COMPLETA PARA PASO A PASO -->
+<div id="steps-overlay">
+  <div id="steps-overlay-inner">
+    <div id="steps-overlay-header">
+      <div id="steps-overlay-title">
+        <h2>Paso a paso del algoritmo</h2>
+        <small id="steps-overlay-subtitle">Sin datos</small>
+      </div>
+      <button id="steps-overlay-close">Cerrar</button>
+    </div>
+
+    <div id="steps-overlay-body">
+      <div id="steps-summary"></div>
+
+      <div id="steps-main">
+        <div id="steps-charts">
+          <canvas id="chart-distance"     height="120"></canvas>
+          <canvas id="chart-objective"    height="120"></canvas>
+          <canvas id="chart-fitness"      height="120"></canvas>
+          <canvas id="chart-temperature"  height="120"></canvas>
+        </div>
+
+        <div id="steps-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  // ============================
+  // MAPA BASE
+  // ============================
+  var map = L.map('map').setView([4.13, -73.63], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  // ============================
+  // PARADEROS + DEMANDA
+  // ============================
+  var stops = {
+    "UNILLANOS":           { name: "Unillanos - Sede Barcelona",   lat: 4.07438, lng: -73.58331, demand: 0 },
+
+    "VIVA":                { name: "Viva",                         lat: 4.125961, lng: -73.638722, demand: 0 },
+    "VILLACENTRO":         { name: "Villacentro",                  lat: 4.1350, lng: -73.6400, demand: 0 },
+    "POSTOBON":            { name: "Postobón",                     lat: 4.1300, lng: -73.6250, demand: 0 },
+    "GRAMA":               { name: "Grama",                        lat: 4.157975, lng: -73.638278, demand: 0 },
+    "HATO_GRANDE":         { name: "Hato Grande",                  lat: 4.1500, lng: -73.6300, demand: 0 },
+    "COVISAN":             { name: "Covisán",                      lat: 4.137862, lng: -73.588121, demand: 0 },
+    "LOS_MARACOS":         { name: "Los Maracos",                  lat: 4.134023, lng: -73.612910, demand: 0 },
+
+    "LA_MADRID":           { name: "La Madrid",                    lat: 4.057538, lng: -73.668749, demand: 0 },
+    "LA_ROCHELA":          { name: "La Rochela",                   lat: 4.1100, lng: -73.6200, demand: 0 },
+
+    "TERMINAL":            { name: "Terminal",                     lat: 4.13226, lng: -73.60359, demand: 0 },
+
+    "AMARILO":             { name: "Amarilo",                      lat: 4.1200, lng: -73.6150, demand: 0 },
+    "SERRAMONTE":          { name: "Serramonte",                   lat: 4.1250, lng: -73.6180, demand: 0 },
+
+    "PARQUE_ESTUDIANTES":  { name: "Parque de los Estudiantes",   lat: 4.1350, lng: -73.6280, demand: 0 },
+    "CENTRO":              { name: "Centro",                      lat: 4.1400, lng: -73.6300, demand: 0 },
+
+    "CAMPANARIO":          { name: "CAMPANARIO",                  lat: 4.132950, lng: -73.56535632730824, demand: 0 },
+
+    "KIRPA_20SUR": {
+      name: "Kirpa (Calle 20 Sur)",
+      lat: 4.12198,
+      lng: -73.58295,
+      demand: 0
+    },
+
+    "VALLES_CAROLINA_20SUR": {
+      name: "Valles de la Carolina (Calle 20 Sur)",
+      lat: 4.11867,
+      lng: -73.58839,
+      demand: 0
+    },
+
+    "GAVIOTAS_20SUR": {
+      name: "Las Gaviotas (Calle 20 Sur)",
+      lat: 4.11572,
+      lng: -73.60384,
+      demand: 0
+    },
+
+    "ACAPULCO_20SUR": {
+      name: "Acapulco (Calle 20 Sur)",
+      lat: 4.12118,
+      lng: -73.59349,
+      demand: 0
+    },
+
+    "MARCO_ANTONIO_PINILLA": {
+      name: "Marco Antonio Pinilla",
+      lat: 4.12999,
+      lng: -73.58778,
+      demand: 0
+    },
+
+    "SANTA_CATALINA": {
+      name: "Santa Catalina",
+      lat: 4.13688,
+      lng: -73.59076,
+      demand: 0
+    },
+
+    "PORFIA": {
+      name: "Porfía",
+      lat: 4.088173,
+      lng: -73.670235,
+      demand: 0
+    }
+  };
+
+  // Marcadores y popups
+  Object.keys(stops).forEach(function(key) {
+    var s = stops[key];
+    var marker = L.marker([s.lat, s.lng]).addTo(map);
+
+    function updatePopup() {
+      marker.bindPopup(
+        "<b>" + s.name + "</b><br/>" +
+        "<code>" + key + "</code><br/>" +
+        "Demanda: <b>" + (s.demand || 0) + "</b> estudiantes"
+      );
+    }
+
+    updatePopup();
+    s._updatePopup = updatePopup;
+  });
+
+  function stopKeysToLatLngs(stopKeys) {
+    return stopKeys.map(function(key) {
+      var s = stops[key];
+      return L.latLng(s.lat, s.lng);
+    });
+  }
+
+  // ============================
+  // OSRM
+  // ============================
+  var OSRM_URL = "https://routing.openstreetmap.de/routed-car/route/v1/driving/";
+
+  function drawOsrmRoute(latlngs, options, fitBounds, onDone) {
+    var coordsStr = latlngs
+      .map(function(ll) { return ll.lng + "," + ll.lat; })
+      .join(";");
+
+    var url = OSRM_URL + coordsStr + "?overview=full&geometries=geojson";
+
+    fetch(url)
+      .then(function(resp) { return resp.json(); })
+      .then(function(data) {
+        if (!data.routes || !data.routes.length) {
+          throw new Error("Sin rutas devueltas por OSRM");
+        }
+        var geom = data.routes[0].geometry;
+        var routeLatLngs = geom.coordinates.map(function(c) {
+          return [c[1], c[0]];
+        });
+
+        var poly = L.polyline(routeLatLngs, options).addTo(map);
+        if (fitBounds) {
+          map.fitBounds(poly.getBounds());
+        }
+        if (onDone) onDone(poly);
+      })
+      .catch(function(err) {
+        console.error("OSRM error:", err);
+        setStatus("Error al consultar OSRM: " + err.message, "error");
+        if (onDone) onDone(null);
+      });
+  }
+
+  // ============================
+  // RUTAS OFICIALES (boletín)
+  // ============================
+  var routeDefinitions = {
+    "UNILLANOS_VIVA": {
+      label: "Unillanos → Viva",
+      stops: ["UNILLANOS", "VIVA"]
+    },
+
+    "UNILLANOS_CENTRO": {
+      label: "Unillanos → Centro",
+      stops: ["UNILLANOS", "PARQUE_ESTUDIANTES","CENTRO"]
+    },
+
+    "UNILLANOS_VILLACENTRO": {
+      label: "Unillanos → Villacentro",
+      stops: ["UNILLANOS", "VILLACENTRO"]
+    },
+
+    "UNILLANOS_POSTOBON_GRAMA_AM": {
+      label: "Unillanos → Postobón → Grama",
+      stops: ["UNILLANOS", "POSTOBON"]
+    },
+
+    "UNILLANOS_HATO_GRANDE_AM": {
+      label: "Unillanos → Hato Grande",
+      stops: ["UNILLANOS", "HATO_GRANDE"]
+    },
+
+    "UNILLANOS_COVISAN_AM": {
+      label: "Unillanos  → Covisán",
+      stops: [
+        "UNILLANOS",
+        "ACAPULCO_20SUR",
+        "VALLES_CAROLINA_20SUR",
+        "KIRPA_20SUR",
+        "CAMPANARIO",
+        "COVISAN"
+      ]
+    },
+
+    "UNILLANOS_LOS_MARACOS_AM": {
+      label: "Unillanos  → Los Maracos",
+      stops: [
+        "UNILLANOS",
+        "ACAPULCO_20SUR",
+        "VALLES_CAROLINA_20SUR",
+        "KIRPA_20SUR",
+        "MARCO_ANTONIO_PINILLA",
+        "TERMINAL",
+        "LOS_MARACOS"
+      ]
+    },
+
+    "LA_MADRID_UNILLANOS": {
+      label: "La Madrid → Unillanos",
+      stops: ["LA_MADRID", "UNILLANOS"]
+    },
+
+    "LA_ROCHELA_UNILLANOS": {
+      label: "La Rochela → Unillanos",
+      stops: ["LA_ROCHELA", "UNILLANOS"]
+    },
+
+    "VIVA_UNILLANOS": {
+      label: "Viva → Unillanos",
+      stops: ["VIVA", "UNILLANOS"]
+    },
+
+    "VILLACENTRO_UNILLANOS": {
+      label: "Villacentro → Unillanos",
+      stops: ["VILLACENTRO", "UNILLANOS"]
+    },
+
+    "GRAMA_UNILLANOS": {
+      label: "Grama → Unillanos",
+      stops: ["GRAMA", "UNILLANOS"]
+    },
+
+    "HATO_GRANDE_UNILLANOS": {
+      label: "Hato Grande → Unillanos",
+      stops: ["HATO_GRANDE", "UNILLANOS"]
+    },
+
+    "COVISAN_UNILLANOS": {
+      label: "Covisán  → Unillanos",
+      stops: [
+        "COVISAN",
+        "CAMPANARIO",
+        "KIRPA_20SUR",
+        "VALLES_CAROLINA_20SUR",
+        "ACAPULCO_20SUR",
+        "UNILLANOS"
+      ]
+    },
+
+    "LOS_MARACOS_UNILLANOS": {
+      label: "Los Maracos → Unillanos",
+      stops: [
+        "LOS_MARACOS",
+        "TERMINAL",
+        "MARCO_ANTONIO_PINILLA",
+        "KIRPA_20SUR",
+        "VALLES_CAROLINA_20SUR",
+        "ACAPULCO_20SUR",
+        "UNILLANOS"
+      ]
+    },
+
+    "UNILLANOS_PORFIA": {
+      label: "Unillanos → Porfía",
+      stops: ["UNILLANOS", "PORFIA"]
+    },
+    "PORFIA_UNILLANOS": {
+      label: "Porfía → Unillanos",
+      stops: ["PORFIA", "UNILLANOS"]
+    }
+  };
+
+  var officialPolylines = {};
+
+  Object.keys(routeDefinitions).forEach(function(routeId) {
+    var def = routeDefinitions[routeId];
+    var latlngs = stopKeysToLatLngs(def.stops);
+    drawOsrmRoute(
+      latlngs,
+      { color: "#9ca3af", weight: 3, opacity: 0.5 },
+      false,
+      function(poly) { officialPolylines[routeId] = poly; }
+    );
+  });
+
+  // ============================
+  // LISTA DE RUTAS EN EL PANEL
+  // ============================
+  var routesListDiv = document.getElementById("routes-list");
+  var toggleRoutesBtn = document.getElementById("toggle-routes-btn");
+
+  Object.keys(routeDefinitions).forEach(function(routeId) {
+    var def = routeDefinitions[routeId];
+    var label = document.createElement("label");
+
+    var left = document.createElement("div");
+    left.className = "route-label-left";
+
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.routeId = routeId;
+
+    cb.addEventListener("change", function(e) {
+      var id = e.target.dataset.routeId;
+      var poly = officialPolylines[id];
+      if (poly) {
+        if (e.target.checked) {
+          poly.addTo(map);
+        } else {
+          map.removeLayer(poly);
+        }
+      }
+
+      var anyChecked = Object.keys(routeDefinitions).some(function(routeId) {
+        var cb2 = document.querySelector('input[data-route-id="' + routeId + '"]');
+        return cb2 && cb2.checked;
+      });
+
+      if (!anyChecked) {
+        resetOptimizationState();
+      }
+
+      updateToggleRoutesBtnLabel();
+    });
+
+    var text = document.createElement("span");
+    text.textContent = def.label;
+
+    left.appendChild(cb);
+    left.appendChild(text);
+
+    var tag = document.createElement("span");
+    tag.className = "route-tag";
+    tag.textContent = "AM/PM";
+
+    label.appendChild(left);
+    label.appendChild(tag);
+    routesListDiv.appendChild(label);
+  });
+
+  function updateToggleRoutesBtnLabel() {
+    var allChecked = Object.keys(routeDefinitions).every(function(routeId) {
+      var cb = document.querySelector('input[data-route-id="' + routeId + '"]');
+      return cb && cb.checked;
+    });
+    toggleRoutesBtn.textContent = allChecked ? "Desmarcar todo" : "Marcar todo";
+  }
+
+  toggleRoutesBtn.addEventListener("click", function() {
+    var allChecked = Object.keys(routeDefinitions).every(function(routeId) {
+      var cb = document.querySelector('input[data-route-id="' + routeId + '"]');
+      return cb && cb.checked;
+    });
+
+    Object.keys(routeDefinitions).forEach(function(routeId) {
+      var cb = document.querySelector('input[data-route-id="' + routeId + '"]');
+      if (!cb) return;
+      cb.checked = !allChecked;
+
+      var poly = officialPolylines[routeId];
+      if (poly) {
+        if (cb.checked) poly.addTo(map);
+        else map.removeLayer(poly);
+      }
+    });
+
+    if (allChecked) {
+      resetOptimizationState();
+    }
+
+    updateToggleRoutesBtnLabel();
+  });
+
+  updateToggleRoutesBtnLabel();
+
+  // Ajustar mapa
+  map.fitBounds([
+    [stops["UNILLANOS"].lat, stops["UNILLANOS"].lng],
+    [stops["VILLACENTRO"].lat, stops["VILLACENTRO"].lng],
+    [stops["VIVA"].lat, stops["VIVA"].lng]
+  ]);
+
+  // ============================
+  // DEMANDA PANEL
+  // ============================
+  var demandPanel = document.getElementById("demand-panel");
+
+  Object.keys(stops).forEach(function(key) {
+    if (key === "UNILLANOS") return;
+
+    var s = stops[key];
+
+    var row = document.createElement("div");
+    row.className = "demand-row";
+
+    var label = document.createElement("div");
+    label.className = "demand-label";
+    label.textContent = s.name + " (" + key + ")";
+
+    var input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.value = s.demand || 0;
+    input.className = "demand-input";
+
+    input.addEventListener("change", function() {
+      var val = parseInt(input.value, 10);
+      if (isNaN(val) || val < 0) val = 0;
+      s.demand = val;
+
+      if (typeof s._updatePopup === "function") {
+        s._updatePopup();
+      }
+    });
+
+    row.appendChild(label);
+    row.appendChild(input);
+    demandPanel.appendChild(row);
+  });
+
+  // ============================
+  // CONTROL BACKEND Y PASO A PASO
+  // ============================
+  var solverSelect = document.getElementById("solver-select");
+  var runBtn = document.getElementById("run-solver-btn");
+  var capacityInput = document.getElementById("capacity-input");
+
+  var statusTextDiv = document.getElementById("status-text");
+  var metricMethod = document.getElementById("metric-method");
+  var metricRouteLabel = document.getElementById("metric-route-label");
+  var metricDistance = document.getElementById("metric-distance");
+  var metricDistanceBadge = document.getElementById("metric-distance-badge");
+  var metricTime = document.getElementById("metric-time");
+  var metricTimeBadge = document.getElementById("metric-time-badge");
+  var metricDemand = document.getElementById("metric-demand");
+  var metricDemandBadge = document.getElementById("metric-demand-badge");
+  var metricFitness = document.getElementById("metric-fitness");
+  var metricFitnessBadge = document.getElementById("metric-fitness-badge");
+  var metricCpu = document.getElementById("metric-cpu");
+  var metricCpuBadge = document.getElementById("metric-cpu-badge");
+
+  // Overlay paso a paso
+  var btnSteps = document.getElementById("btn-steps");
+  var stepsOverlay = document.getElementById("steps-overlay");
+  var stepsOverlayClose = document.getElementById("steps-overlay-close");
+  var stepsOverlaySubtitle = document.getElementById("steps-overlay-subtitle");
+  var stepsSummary = document.getElementById("steps-summary");
+  var stepsList = document.getElementById("steps-list");
+
+  // ============================
+  // IA WIDGET (chat explicador)
+  // ============================
+  const aiWidget    = document.getElementById("ai-widget");
+  const aiToggleBtn = document.getElementById("ai-toggle-btn");
+  const aiCloseBtn  = document.getElementById("ai-close-btn");
+  const aiForm      = document.getElementById("ai-form");
+  const aiInput     = document.getElementById("ai-input");
+  const aiMessages  = document.getElementById("ai-messages");
+  const aiSendBtn   = document.getElementById("ai-send-btn");
+
+  // arranca COMPLETAMENTE oculto y con el panel cerrado
+  if (aiWidget) {
+    aiWidget.style.display = "none";
+    aiWidget.classList.remove("open");
+  }
+
+  function pushAiMessage(text, who) {
+    if (!aiMessages) return;
+    const div = document.createElement("div");
+    div.className = "ai-message " + (who === "user" ? "user" : "bot");
+    div.textContent = text;
+    aiMessages.appendChild(div);
+    aiMessages.scrollTop = aiMessages.scrollHeight;
+  }
+
+  // abre/cierra SOLO el panel del chat
+  if (aiToggleBtn && aiWidget) {
+    aiToggleBtn.addEventListener("click", function () {
+      aiWidget.classList.toggle("open");
+    });
+  }
+
+  if (aiCloseBtn && aiWidget) {
+    aiCloseBtn.addEventListener("click", function () {
+      aiWidget.classList.remove("open");
+    });
+  }
+
+  // Envío a /ask_ai usando lastSolution como contexto
+  if (aiForm) {
+    aiForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const q = aiInput.value.trim();
+      if (!q) return;
+
+      pushAiMessage(q, "user");
+      aiInput.value = "";
+      aiSendBtn.disabled = true;
+
+      const payload = {
+        question: q,
+        method: lastSolution ? (lastSolution.method || null) : null,
+        solve_context: lastSolution || null
+      };
+
+      fetch("/ask_ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+        .then(r => r.json())
+        .then(data => {
+          const ans = data && data.answer
+            ? data.answer
+            : "[IA] No se recibió respuesta del servidor.";
+          pushAiMessage(ans, "bot");
+        })
+        .catch(err => {
+          console.error(err);
+          pushAiMessage("[ERROR] No se pudo contactar la IA: " + err.message, "bot");
+        })
+        .finally(() => {
+          aiSendBtn.disabled = false;
+        });
+    });
+  }
+
+  // ============================
+  // Estado de optimización + métricas
+  // ============================
+  var lastSolution = null;
+  btnSteps.disabled = true;
+
+  var optimizedBusPolylines = [];
+  var busColors = ["#10b981"];
+
+  var distanceChart = null;
+  var objectiveChart = null;
+  var fitnessChartObj = null;
+  var temperatureChart = null;
+
+  function setStatus(message, level) {
+    statusTextDiv.innerHTML = "";
+    var dot = document.createElement("span");
+    dot.className = "dot-ok";
+    if (level === "warn") dot.classList.add("dot-warn");
+    if (level === "error") dot.classList.add("dot-error");
+    var txt = document.createElement("span");
+    txt.textContent = message;
+    statusTextDiv.appendChild(dot);
+    statusTextDiv.appendChild(txt);
+  }
+
+  function resetOptimizationState() {
+    optimizedBusPolylines.forEach(function(p) { map.removeLayer(p); });
+    optimizedBusPolylines = [];
+
+    setStatus("Selecciona al menos una ruta oficial para optimizar.", "warn");
+
+    metricMethod.textContent = "—";
+    metricRouteLabel.textContent = "Sin ruta";
+    metricDistance.textContent = "—";
+    metricDistanceBadge.textContent = "Pendiente";
+    metricTime.textContent = "—";
+    metricTimeBadge.textContent = "Pendiente";
+    metricDemand.textContent = "—";
+    metricDemandBadge.className = "metric-badge-warn";
+    metricDemandBadge.textContent = "Sin validar";
+    metricFitness.textContent = "—";
+    metricFitnessBadge.textContent = "Pendiente";
+    metricCpu.textContent = "—";
+    metricCpuBadge.textContent = "Sin ejecutar";
+
+    lastSolution = null;
+    btnSteps.disabled = true;
+    btnSteps.style.cursor = "not-allowed";
+    btnSteps.textContent = "Ver paso a paso (sin datos)";
+  }
+
+  function buildChartsFromSteps(steps) {
+    if (!steps || !steps.length) return;
+
+    var labels = steps.map(function(s) { return s.iteration; });
+    var distances = steps.map(function(s) { return s.distance_km; });
+    var objectives = steps.map(function(s) { return s.objective_km; });
+    var fitnesses = steps.map(function(s) { return s.fitness; });
+    var temps = steps.map(function(s) {
+      return (s.temperature !== null && typeof s.temperature === "number") ? s.temperature : null;
+    });
+
+    var ctxDist = document.getElementById("chart-distance").getContext("2d");
+    if (distanceChart) distanceChart.destroy();
+    distanceChart = new Chart(ctxDist, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Distancia (km)",
+          data: distances,
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { title: { display: true, text: "Iteración" } },
+          y: { title: { display: true, text: "Distancia (km)" } }
+        }
+      }
+    });
+
+    var ctxObj = document.getElementById("chart-objective").getContext("2d");
+    if (objectiveChart) objectiveChart.destroy();
+    objectiveChart = new Chart(ctxObj, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Objetivo (km penalizados)",
+          data: objectives,
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { title: { display: true, text: "Iteración" } },
+          y: { title: { display: true, text: "Objetivo" } }
+        }
+      }
+    });
+
+    var ctxFit = document.getElementById("chart-fitness").getContext("2d");
+    if (fitnessChartObj) fitnessChartObj.destroy();
+    fitnessChartObj = new Chart(ctxFit, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Fitness",
+          data: fitnesses,
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { title: { display: true, text: "Iteración" } },
+          y: { title: { display: true, text: "Fitness" } }
+        }
+      }
+    });
+
+    var ctxTemp = document.getElementById("chart-temperature").getContext("2d");
+    if (temperatureChart) temperatureChart.destroy();
+    temperatureChart = new Chart(ctxTemp, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Temperatura",
+          data: temps,
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { title: { display: true, text: "Iteración" } },
+          y: { title: { display: true, text: "T" } }
+        }
+      }
+    });
+  }
+
+  function openStepsOverlay() {
+    if (!lastSolution || !Array.isArray(lastSolution.steps) || !lastSolution.steps.length) return;
+
+    var m = (lastSolution.method || "").toUpperCase();
+    stepsOverlaySubtitle.textContent =
+      "Método: " + m + " · Ruta: " + (lastSolution.label || lastSolution.route.join(" → "));
+
+    stepsSummary.textContent =
+      "Pasos registrados: " + lastSolution.steps.length +
+      " · Distancia final: " + lastSolution.distance_km.toFixed(2) + " km" +
+      " · Fitness: " + lastSolution.fitness.toFixed(4);
+
+    stepsList.innerHTML = "";
+    lastSolution.steps.forEach(function(step) {
+      var div = document.createElement("div");
+      div.className = "step-item";
+
+      var header = document.createElement("div");
+      header.className = "step-header";
+      header.innerHTML =
+        "[" + (step.method || "").toUpperCase() +
+        " · iter " + step.iteration + "] " +
+        step.phase +
+        (step.best_so_far ? ' <span style="color:#bbf7d0;">(mejor)</span>' : "");
+
+      var route = document.createElement("div");
+      route.className = "step-route";
+      route.textContent = (step.route || []).join(" → ");
+
+      var metrics = document.createElement("div");
+      metrics.className = "step-metrics";
+      var tempStr = (step.temperature !== null && typeof step.temperature === "number")
+        ? " · T=" + step.temperature.toFixed(3)
+        : "";
+      metrics.textContent =
+        "dist=" + step.distance_km.toFixed(2) + " km · obj=" +
+        step.objective_km.toFixed(2) + " · fitness=" +
+        step.fitness.toFixed(4) + tempStr;
+
+      div.appendChild(header);
+      div.appendChild(route);
+      div.appendChild(metrics);
+
+      if (step.details || step.formulas) {
+        var extra = document.createElement("div");
+        extra.className = "step-extra";
+
+        if (step.details) {
+          var detailsDiv = document.createElement("div");
+          detailsDiv.className = "step-details-text";
+          detailsDiv.textContent = step.details;
+          extra.appendChild(detailsDiv);
+        }
+
+        if (step.formulas) {
+          var formulasDiv = document.createElement("div");
+          formulasDiv.className = "step-formulas";
+
+          var title = document.createElement("div");
+          title.className = "step-formulas-title";
+          title.textContent = "Cálculos detallados";
+          formulasDiv.appendChild(title);
+
+          var formulaOrder = [
+            { key: "distance",      label: "Distancia total" },
+            { key: "demand",        label: "Demanda" },
+            { key: "over_capacity", label: "Exceso de capacidad" },
+            { key: "penalty",       label: "Penalización" },
+            { key: "objective",     label: "Función objetivo" },
+            { key: "fitness",       label: "Fitness" },
+            { key: "ga_selection",  label: "Selección (GA)" },
+            { key: "ga_crossover",  label: "Crossover (GA)" },
+            { key: "ga_mutation",   label: "Mutación (GA)" },
+            { key: "sa_delta",      label: "Δ de costo (SA)" },
+            { key: "sa_acceptance", label: "Prob. de aceptación (SA)" }
+          ];
+
+          formulaOrder.forEach(function(item) {
+            if (!step.formulas[item.key]) return;
+            var line = document.createElement("div");
+            line.className = "step-formulas-item";
+            line.innerHTML =
+              "<span class='step-formulas-label'>" + item.label + ":</span>" +
+              "<span class='step-formulas-exp'>" + step.formulas[item.key] + "</span>";
+            formulasDiv.appendChild(line);
+          });
+
+          extra.appendChild(formulasDiv);
+        }
+
+        div.appendChild(extra);
+      }
+
+      stepsList.appendChild(div);
+    });
+
+    buildChartsFromSteps(lastSolution.steps);
+
+    stepsOverlay.style.display = "flex";
+
+    // mostrar SOLO la burbuja de IA
+    if (aiWidget) {
+      aiWidget.style.display = "flex";
+      aiWidget.classList.remove("open");
+    }
+  }
+
+  function closeStepsOverlay() {
+    stepsOverlay.style.display = "none";
+
+    if (aiWidget) {
+      aiWidget.style.display = "none";
+      aiWidget.classList.remove("open");
+    }
+  }
+
+  btnSteps.addEventListener("click", function() {
+    if (btnSteps.disabled) return;
+    openStepsOverlay();
+  });
+
+  stepsOverlayClose.addEventListener("click", closeStepsOverlay);
+
+  stepsOverlay.addEventListener("click", function(e) {
+    if (e.target === stepsOverlay) {
+      closeStepsOverlay();
+    }
+  });
+
+  // ============================
+  // CLICK EN "OPTIMIZAR RUTA"
+  // ============================
+  runBtn.addEventListener("click", function() {
+    var method = solverSelect.value;
+    var capacity = parseInt(capacityInput.value, 10);
+    if (isNaN(capacity) || capacity <= 0) {
+      capacity = 40;
+      capacityInput.value = 40;
+    }
+
+    var activeRouteIds = Object.keys(routeDefinitions).filter(function(routeId) {
+      var cb = document.querySelector('input[data-route-id="' + routeId + '"]');
+      return cb && cb.checked;
+    });
+
+    if (activeRouteIds.length === 0) {
+      setStatus("Selecciona al menos una ruta oficial para optimizar.", "warn");
+      return;
+    }
+
+    var demands = {};
+    Object.keys(stops).forEach(function(key) {
+      demands[key] = stops[key].demand || 0;
+    });
+
+    setStatus("Ejecutando " + method.toUpperCase() + " sobre " + activeRouteIds.length + " rutas...", "warn");
+
+    fetch("/solve_multi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        method: method,
+        active_routes: activeRouteIds,
+        demands: demands,
+        capacity: capacity
+      })
+    })
+      .then(function(resp) { return resp.json(); })
+      .then(function(data) {
+        if (data.error) {
+          setStatus("Error del backend: " + data.error, "error");
+          return;
+        }
+
+        if (!data.buses || !data.buses.length) {
+          setStatus("Respuesta inválida del backend (sin buses).", "error");
+          return;
+        }
+
+        optimizedBusPolylines.forEach(function(p) { map.removeLayer(p); });
+        optimizedBusPolylines = [];
+
+        data.buses.forEach(function(bus, idx) {
+          var latlngsBus = stopKeysToLatLngs(bus.route);
+          var color = busColors[idx % busColors.length];
+
+          drawOsrmRoute(
+            latlngsBus,
+            { color: color, weight: 4, opacity: 0.9, dashArray: "6 4" },
+            false,
+            function(poly) {
+              if (poly) optimizedBusPolylines.push(poly);
+            }
+          );
+        });
+
+        var summaryBus = null;
+        if (data.global_bus) {
+          var gLatlngs = stopKeysToLatLngs(data.global_bus.route);
+          drawOsrmRoute(
+            gLatlngs,
+            { color: "#10b981", weight: 6, opacity: 0.9, dashArray: "2 6" },
+            true,
+            function(poly) {
+              if (poly) optimizedBusPolylines.push(poly);
+            }
+          );
+          summaryBus = data.global_bus;
+        } else {
+          summaryBus = data.buses[0];
+        }
+
+        setStatus("Optimización completada con " + (data.method || method).toUpperCase(), "ok");
+
+        metricMethod.textContent = (data.method || method || "").toUpperCase();
+        metricRouteLabel.textContent = summaryBus.label || summaryBus.route.join(" → ");
+
+        metricDistance.textContent = summaryBus.distance_km
+          ? summaryBus.distance_km.toFixed(2) + " km"
+          : "—";
+        metricTime.textContent = summaryBus.time_min
+          ? summaryBus.time_min.toFixed(1) + " min"
+          : "—";
+
+        var totalDemand = summaryBus.demand || 0;
+        var cap = summaryBus.capacity || capacity;
+        metricDemand.textContent = totalDemand + " / " + cap;
+
+        metricDemandBadge.classList.remove("metric-badge", "metric-badge-warn", "metric-badge-bad");
+        if (totalDemand <= cap) {
+          metricDemandBadge.classList.add("metric-badge");
+          metricDemandBadge.textContent = "Dentro de capacidad";
+        } else if (totalDemand <= cap * 1.2) {
+          metricDemandBadge.classList.add("metric-badge-warn");
+          metricDemandBadge.textContent = "Ligeramente saturado";
+        } else {
+          metricDemandBadge.classList.add("metric-badge-bad");
+          metricDemandBadge.textContent = "Sobrecupo fuerte";
+        }
+
+        var fitness = summaryBus.fitness;
+        if (typeof fitness === "number") {
+          metricFitness.textContent = fitness.toFixed(3);
+          metricFitnessBadge.textContent = "Fitness calculado";
+        } else {
+          metricFitness.textContent = "—";
+          metricFitnessBadge.textContent = "Sin fitness";
+        }
+
+        if (typeof summaryBus.cpu_ms === "number") {
+          metricCpu.textContent = summaryBus.cpu_ms.toFixed(0) + " ms";
+          metricCpuBadge.textContent = summaryBus.cpu_ms < 200 ? "Tiempo OK" : "Cálculo pesado";
+        } else if (typeof data.cpu_ms_total === "number") {
+          metricCpu.textContent = data.cpu_ms_total.toFixed(0) + " ms";
+          metricCpuBadge.textContent = data.cpu_ms_total < 200 ? "Tiempo OK" : "Cálculo pesado";
+        } else {
+          metricCpu.textContent = "—";
+          metricCpuBadge.textContent = "Sin datos";
+        }
+
+        metricDistanceBadge.textContent = "Rutas generadas";
+        metricTimeBadge.textContent = "ETA estimado";
+
+        lastSolution = {
+          method: data.method || method,
+          route: summaryBus.route,
+          label: summaryBus.label,
+          distance_km: summaryBus.distance_km,
+          fitness: summaryBus.fitness,
+          steps: summaryBus.steps || []
+        };
+
+        if (lastSolution.steps && lastSolution.steps.length) {
+          btnSteps.disabled = false;
+          btnSteps.style.cursor = "pointer";
+          btnSteps.textContent = "Ver paso a paso (" + lastSolution.steps.length + " pasos)";
+        } else {
+          btnSteps.disabled = true;
+          btnSteps.style.cursor = "not-allowed";
+          btnSteps.textContent = "Ver paso a paso (sin datos)";
+        }
+      })
+      .catch(function(err) {
+        console.error(err);
+        setStatus("Error llamando al backend: " + err.message, "error");
+      });
+  });
+}); // fin DOMContentLoaded
+</script>
+
+<!-- WIDGET DE IA EXPLICADORA -->
+<div id="ai-widget">
+  <!-- Botón flotante tipo burbuja -->
+  <button id="ai-toggle-btn" title="IA explicadora">
+    <div class="ai-avatar">
+      <span>IA</span>
+    </div>
+  </button>
+
+  <!-- Panel de chat -->
+  <div id="ai-panel">
+    <div id="ai-panel-header">
+      <div class="ai-header-left">
+        <div class="ai-header-avatar">IA</div>
+        <div class="ai-header-texts">
+          <div class="ai-header-title">IA explicadora</div>
+          <div class="ai-header-subtitle">Metaheurísticas · Rutas Unillanos</div>
+        </div>
+      </div>
+      <button id="ai-close-btn" class="ai-icon-btn" title="Cerrar">✕</button>
+    </div>
+
+    <div id="ai-messages"></div>
+
+    <form id="ai-form">
+      <textarea
+        id="ai-input"
+        placeholder="Haz una pregunta sobre la ruta, el GA, el SA, penalizaciones, etc..."
+        rows="2"
+      ></textarea>
+      <button type="submit" id="ai-send-btn">Analizar</button>
+    </form>
+  </div>
+</div>
+
+</body>
+</html>
